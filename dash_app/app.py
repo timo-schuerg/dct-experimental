@@ -6,129 +6,87 @@
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_table
+import dash_bootstrap_components as dbc
 import plotly.express as px
-import plotly.graph_objects as go
+import string
 
 import pandas as pd
 from scipy import signal
 import numpy as np
-from sklearn.metrics import mean_squared_error
 
+from app_lib import alphabet
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-
+# Load stylesheet and create app
+external_stylesheets = [dbc.themes.BOOTSTRAP]
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-# assume you have a "long-form" data frame
-# see https://plotly.com/python/px-arguments/ for more options
+# Basic data
+letters = [{'label': x, 'value': x} for x in list(string.ascii_lowercase)]
 
-t = np.linspace(0, 8*np.pi, 1000)
-s = signal.sawtooth(t + np.pi, width = 1)
-
-app.layout = html.Div(children=[
-    html.H1(children='Test your Fourier approximation skills!'),
-
-    dcc.Slider(
-        id='a_1',
-        min=-2.5,
-        max=2.5,
-        step=0.01,
-        value=2,
+# Create main layout sections
+header = dbc.Row(
+    dbc.Col(
+        [
+            html.Div(style={"height": 75}),
+            html.H3("Discrete Cosinus Transform", className="text-center")        ]
     ),
-    dcc.Slider(
-        id='a_2',
-        min=-2.5,
-        max=2.5,
-        step=0.01,
-        value=0,
-    ),
-    dcc.Slider(
-        id='a_3',
-        min=-2.5,
-        max=2.5,
-        step=0.01,
-        value=0,
-    ),
-    dcc.Slider(
-        id='a_4',
-        min=-2.5,
-        max=2.5,
-        step=0.01,
-        value=0,
-    ),
-    dcc.Slider(
-        id='a_5',
-        min=-2.5,
-        max=2.5,
-        step=0.01,
-        value=0,
-    ),
+    className="mb-4",
+)
 
-    html.Div(id='slider-output-container'),
-
-    dcc.Graph(
-        id='approximation'
-    ),
-
-    dcc.Graph(
-        id='error',
-    )
-])
-
-@app.callback(
-    dash.dependencies.Output('approximation', 'figure'),
-    dash.dependencies.Output('slider-output-container', 'children'),
-    dash.dependencies.Output('error', 'figure'),
+control_panel = dbc.Card(
     [
-        dash.dependencies.Input('a_1', 'value'),
-        dash.dependencies.Input('a_2', 'value'),
-        dash.dependencies.Input('a_3', 'value'),
-        dash.dependencies.Input('a_4', 'value'),
-        dash.dependencies.Input('a_5', 'value')
+        html.P("Choose your letter"),
+        dcc.Dropdown(
+            id='letters',
+            options=letters,
+            value='a'
+        ),  
+    ],
+    className="shadow-sm bg-light p-4 mb-2",
+    style={"minWidth": "250px"},
+    id="filter-options",
+)
+
+app.layout = dbc.Container(
+    [
+        header,
+        dbc.Row(
+            [
+                dbc.Col(control_panel, width=4),
+                dbc.Col(
+                    dcc.Graph(id='letter_display'),
+                ),
+                dbc.Col(
+                    dash_table.DataTable(id='letter_table', style_header = {'display': 'none'})
+                )
+            ],
+            className="m-2",
+        ),
+
     ]
 )
-def update_figure(a_1, a_2, a_3, a_4, a_5):
 
-    df = pd.DataFrame({
-        "x": t,
-        "y": np.pi * s ,
-        "signal": ["sawtooth" for t in t]
-    })
+@app.callback(
+    dash.dependencies.Output('letter_display', 'figure'),
+    dash.dependencies.Output('letter_table', 'data'),
+    dash.dependencies.Output('letter_table', 'columns'),
+    dash.dependencies.Input('letters', 'value'),
+)
+def update_figure(value):
+    list_letter = alphabet[value]
+    letter = np.array([list(x) for x in list_letter]).astype(np.float)
+    imgplot = px.imshow(letter, binary_string=True)
 
-
-    df = df.append(
-        pd.DataFrame({
-            "x": t,
-            "y": a_1 * np.sin(t) + a_2 * np.sin(2*t) + a_3 * np.sin(3*t) + a_4 * np.sin(4*t) + a_5 * np.sin(5*t),
-            "signal": ["fourier" for t in t]
-        })
+    letter_data_frame = pd.DataFrame(
+        data=letter,
+        columns = range(1,9),
+        index = range(1,9)
     )
+    letter_data_dict = letter_data_frame.to_dict('records')
+    letter_columns = [{"name": str(i), "id": str(i)} for i in letter_data_frame.columns]
 
-    fig_lines = px.line(df, x='x', y='y', color='signal', title='Sawtooth' )
-
-    error_df = df[(df.x >= np.pi) & (df.x < 3*np.pi)]
-    error = mean_squared_error(
-        error_df[error_df.signal=='sawtooth'].y,
-        error_df[error_df.signal=='fourier'].y)
-
-    fig_error = go.Figure(
-        go.Indicator(
-            mode = "gauge+number",
-            value = error,
-            title = {'text': "Mean squared error"},
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            gauge = {'axis': {'range': [None, 10]},
-                    'threshold' : {
-                        'line': {'color': "green", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 0.37211
-                        }
-                    }))
-
-    function_string = 'f(t) = 0 + {a_1} * sin(t) + {a_2} * sin(2t) + {a_3} * sin(3t) + {a_4} * sin(4t) + {a_5} * sin(5t)'.format(a_1=a_1, a_2=a_2, a_3=a_3, a_4=a_4, a_5=a_5) 
-
-
-    return fig_lines, 'You have selected ' + function_string, fig_error
+    return imgplot, letter_data_dict, letter_columns
 
 if __name__ == '__main__':
     app.run_server(debug=True)
