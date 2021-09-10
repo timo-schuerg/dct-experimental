@@ -243,7 +243,7 @@ def update_figure(letters, cutoff):
     quantplot.update_yaxes(showticklabels=False)
 
     # Compute compression rate
-    compression_rate =  16 / (quant > 0).sum()
+    compression_rate =  64 / (quant > 0).sum()
 
     return imgplot, letter_data_dict, letter_columns, quantplot, compression_rate, transplot, trans_letter_data_dict, trans_letter_columns
 
