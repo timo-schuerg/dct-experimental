@@ -51,7 +51,6 @@ control_letter = dbc.Card(
         ),  
     ],
     className="shadow-sm bg-light p-4 mb-2",
-    style={"minWidth": "250px"},
     id="filter-letter-options",
 )
 control_cutoff = dbc.Card(
@@ -60,14 +59,13 @@ control_cutoff = dbc.Card(
         dcc.Slider(
             id='cutoff',
             min=0,
-            max=1,
-            step=0.01,
+            max=100,
+            step=10,
             value=0,
-            marks={ np.round(i,2): str(np.round(i,2)) for i in np.linspace(0,1,10,endpoint=False).tolist()}
+            marks={ int(i): str(int(i)) for i in np.linspace(0,100,10,endpoint=False).tolist()}
         ), 
     ],
     className="shadow-sm bg-light p-4 mb-2",
-    style={"minWidth": "250px"},
     id="filter-cutoff",
 )
 letter_display = dbc.Card(
@@ -103,7 +101,7 @@ phase_matrix_display = dbc.Card(
         html.P("The transformed image as matrix:"),
         dash_table.DataTable(id='phase_table', style_header = {'display': 'none'})
     ],
-    className="p-4 mr-2 shadow-sm bg-light",
+    className="p-4 mr-2 shadow-sm bg-light"
 )
 
 app.layout = dbc.Container(
@@ -170,6 +168,7 @@ app.layout = dbc.Container(
     dash.dependencies.Output('phase_display', 'figure'),
     dash.dependencies.Output('phase_table', 'data'),
     dash.dependencies.Output('phase_table', 'columns'),
+    dash.dependencies.Output('phase_table', 'style_data_conditional'),
     dash.dependencies.Input('letters', 'value'),
     dash.dependencies.Input('cutoff', 'value'),
 )
@@ -178,6 +177,7 @@ def update_figure(letters, cutoff):
     # Load letter and convert to numpy array
     list_letter = alphabet[letters]
     letter = np.array([list(x) for x in list_letter]).astype(np.float)
+    letter = letter * 255 - 128
 
     # Create plot of letter
     imgplot = px.imshow(
@@ -219,12 +219,25 @@ def update_figure(letters, cutoff):
 
     # Create matrix view of transformed letter
     trans_letter_data_frame = pd.DataFrame(
-        data=letter_trans.round(2),
+        data=letter_trans.round(0).astype(int),
         columns = range(1,9),
         index = range(1,9)
     )
     trans_letter_data_dict = trans_letter_data_frame.to_dict('records')
     trans_letter_columns = [{"name": str(i), "id": str(i)} for i in trans_letter_data_frame.columns]
+    trans_letter_style = [
+        {
+            'if': {
+                'row_index': x[0],
+                'column_id': str(x[1]+1)
+            },
+            'backgroundColor': 'hotpink',
+            'color': 'white'
+        }
+        for x in np.transpose(
+                (np.absolute(letter_trans) <= cutoff).nonzero()
+            ).tolist()
+    ]
 
     # Create image of transformed and cut off letter
     quant = letter_trans.copy()
@@ -245,7 +258,7 @@ def update_figure(letters, cutoff):
     # Compute compression rate
     compression_rate =  64 / (quant != 0).sum()
 
-    return imgplot, letter_data_dict, letter_columns, quantplot, compression_rate, transplot, trans_letter_data_dict, trans_letter_columns
+    return imgplot, letter_data_dict, letter_columns, quantplot, compression_rate, transplot, trans_letter_data_dict, trans_letter_columns, trans_letter_style
 
 if __name__ == '__main__':
     app.run_server(host='0.0.0.0', port=8050)
